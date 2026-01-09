@@ -1,4 +1,4 @@
-using System.Collections;
+﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -68,28 +68,3 @@ public class DayNightCycle : MonoBehaviour
         RenderSettings.reflectionIntensity = reflectionsIntensityMultipler.Evaluate(time);
     }
 }
-
-// ────────────────────────────────────────────────────────────────────────────
-// COMPONENTI / DATI DEL SOLE (Sun)
-// ────────────────────────────────────────────────────────────────────────────
-// public Light sun;
-// - Riferimento al componente Light del “Sole” in scena.
-// - IMPORTANTISSIMO: devi trascinare qui la Directional Light del sole nell’Inspector.
-// - Se è null, non puoi modificare né intensità né colore.
-
-// public Gradient sunColor;
-// - Gradiente colore in base a “time”.
-// - Esempio tipico:
-//   - alba: arancio/rosa
-//   - mezzogiorno: bianco/giallo
-//   - tramonto: rosso/viola
-//   - notte: blu scuro
-
-// public AnimationCurve sunIntensity;
-// - Curva che controlla l’intensità della luce in base a “time”.
-// - Tipicamente:
-//   - notte: 0
-//   - alba: sale
-//   - mezzogiorno: picco
-//   - tramonto: scende
-//   - notte: torna a 0
