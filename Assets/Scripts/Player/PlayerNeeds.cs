@@ -16,74 +16,125 @@ public class PlayerNeeds : MonoBehaviour, IDamagable
 
     public UnityEvent onTakeDamage;
 
-    void Start ()
+    private bool _isDead;
+
+    void Start()
     {
-        // set the start values
-        health.curValue = health.startValue;
-        hunger.curValue = hunger.startValue;
-        thirst.curValue = thirst.startValue;
-        sleep.curValue = sleep.startValue;
+        _isDead = false;
+
+        // set the start values (se startValue non impostato <=0, fallback a maxValue)
+        health.curValue = (health.startValue > 0f) ? health.startValue : health.maxValue;
+        hunger.curValue = (hunger.startValue > 0f) ? hunger.startValue : hunger.maxValue;
+        thirst.curValue = (thirst.startValue > 0f) ? thirst.startValue : thirst.maxValue;
+        sleep.curValue = (sleep.startValue > 0f) ? sleep.startValue : sleep.maxValue;
+
+        // clamp iniziale per sicurezza (evita valori fuori range se Inspector è settato male)
+        health.ClampToRange();
+        hunger.ClampToRange();
+        thirst.ClampToRange();
+        sleep.ClampToRange();
+
+        // se dopo l'inizializzazione l'health è zero o negativa, riparazione e warning
+        if (health.curValue <= 0f)
+        {
+            Debug.LogWarning("Health startValue <= 0, impostato automaticamente a maxValue.");
+            health.curValue = health.maxValue;
+        }
+
+        // update UI subito (così non resta vuota fino al primo frame)
+        UpdateUI();
     }
 
-    void Update ()
+    void Update()
     {
+        // se morto, non continuare a far decadere/aggiornare UI ogni frame
+        if (_isDead) return;
+
         // decay needs over time
         hunger.Subtract(hunger.decayRate * Time.deltaTime);
         thirst.Subtract(thirst.decayRate * Time.deltaTime);
         sleep.Add(sleep.regenRate * Time.deltaTime);
 
         // decay health over time if no hunger or thirst
-        if(hunger.curValue == 0.0f)
+        // uso <= 0 per evitare problemi di float equality
+        if (hunger.curValue <= 0.0f)
             health.Subtract(noHungerHealthDecay * Time.deltaTime);
-        if(thirst.curValue == 0.0f)
+
+        if (thirst.curValue <= 0.0f)
             health.Subtract(noThirstHealthDecay * Time.deltaTime);
 
-        // check if player is dead
-        if(health.curValue == 0.0f)
+        // check if player is dead (una sola volta)
+        if (health.curValue <= 0.0f)
         {
+            _isDead = true;
             Die();
+            UpdateUI(); // aggiorna UI finale (barra a 0 ecc.)
+            return;
         }
 
-        // update UI bars
-        health.uiBar.fillAmount = health.GetPercentage();
-        hunger.uiBar.fillAmount = hunger.GetPercentage();
-        thirst.uiBar.fillAmount = thirst.GetPercentage();
-        sleep.uiBar.fillAmount = sleep.GetPercentage();
+        UpdateUI();
+    }
+
+    private void UpdateUI()
+    {
+        // update UI bars (con null-check, evita spam di errori)
+        if (health.uiBar) health.uiBar.fillAmount = health.GetPercentage();
+        if (hunger.uiBar) hunger.uiBar.fillAmount = hunger.GetPercentage();
+        if (thirst.uiBar) thirst.uiBar.fillAmount = thirst.GetPercentage();
+        if (sleep.uiBar) sleep.uiBar.fillAmount = sleep.GetPercentage();
     }
 
     // adds to the player's HEALTH
-    public void Heal (float amount)
+    public void Heal(float amount)
     {
+        if (_isDead) return;
         health.Add(amount);
+        UpdateUI();
     }
 
     // adds to the player's HUNGER
-    public void Eat (float amount)
+    public void Eat(float amount)
     {
+        if (_isDead) return;
         hunger.Add(amount);
+        UpdateUI();
     }
 
     // adds to the player's THIRST
-    public void Drink (float amount)
+    public void Drink(float amount)
     {
+        if (_isDead) return;
         thirst.Add(amount);
+        UpdateUI();
     }
 
     // subtracts from the player's SLEEP
-    public void Sleep (float amount)
+    public void Sleep(float amount)
     {
+        if (_isDead) return;
         sleep.Subtract(amount);
+        UpdateUI();
     }
 
     // called when the player takes physical damage (fire, enemy, etc)
-    public void TakePhysicalDamage (int amount)
+    public void TakePhysicalDamage(int amount)
     {
+        if (_isDead) return;
+
         health.Subtract(amount);
         onTakeDamage?.Invoke();
+
+        if (health.curValue <= 0.0f)
+        {
+            _isDead = true;
+            Die();
+        }
+
+        UpdateUI();
     }
 
     // called when the player's health reaches 0
-    public void Die ()
+    public void Die()
     {
         Debug.Log("Player is dead");
     }
@@ -94,6 +145,7 @@ public class Need
 {
     [HideInInspector]
     public float curValue;
+
     public float maxValue;
     public float startValue;
     public float regenRate;
@@ -101,21 +153,52 @@ public class Need
     public Image uiBar;
 
     // add to the need
-    public void Add (float amount)
+    public void Add(float amount)
     {
+        // evita NaN/Infinity e clamp corretto anche se maxValue è 0
+        if (maxValue <= 0.00001f)
+        {
+            curValue = 0f;
+            return;
+        }
+
         curValue = Mathf.Min(curValue + amount, maxValue);
     }
 
     // subtract from the need
-    public void Subtract (float amount)
+    public void Subtract(float amount)
     {
+        // se maxValue è invalido, comunque manteniamo curValue a 0
+        if (maxValue <= 0.00001f)
+        {
+            curValue = 0f;
+            return;
+        }
+
         curValue = Mathf.Max(curValue - amount, 0.0f);
     }
 
-    // return the percentage value (0.0 - 1.0)
-    public float GetPercentage ()
+    // utility: clamp curValue dentro range valido
+    public void ClampToRange()
     {
-        return curValue / maxValue;
+        if (maxValue <= 0.00001f)
+        {
+            curValue = 0f;
+            return;
+        }
+
+        curValue = Mathf.Clamp(curValue, 0f, maxValue);
+    }
+
+    // return the percentage value (0.0 - 1.0)
+    public float GetPercentage()
+    {
+        // evita NaN/Infinity se maxValue è 0 o negativo
+        if (maxValue <= 0.00001f) return 0f;
+
+        // clamp di sicurezza: se curValue sballa, non manda la UI fuori range
+        float safe = Mathf.Clamp(curValue, 0f, maxValue);
+        return safe / maxValue;
     }
 }
 
@@ -123,3 +206,4 @@ public interface IDamagable
 {
     void TakePhysicalDamage(int damageAmount);
 }
+
